@@ -9,6 +9,7 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+_is_torch_greater_or_equal_than_2_9 = is_torch_greater_or_equal("2.9", accept_dev=False)
 _is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -28,6 +29,17 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, value: torch.Tensor) -> bool:
+    # PyTorch 2.9 CPU flash supports compact GQA with masks. Preserve the
+    # legacy path for K/V gradients and captured graphs: compact backward has
+    # a different accumulation order, and shape tests can specialize export.
+    if (
+        key.device.type == "cpu"
+        and _is_torch_greater_or_equal_than_2_9
+        and not torch.compiler.is_compiling()
+        and not torch.jit.is_tracing()
+        and not (torch.is_grad_enabled() and (key.requires_grad or value.requires_grad))
+    ):
+        return key.shape[-1] == value.shape[-1]
     # XPU and MPS support masked GQA under more recent torch versions
     if _is_torch_xpu_available:
         return _is_torch_greater_or_equal_than_2_8
