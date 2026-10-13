@@ -1,7 +1,13 @@
 import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
-from ..utils import is_torch_mps_available, is_torch_npu_available, is_torch_xpu_available, logging
+from ..utils import (
+    is_torch_mps_available,
+    is_torch_npu_available,
+    is_torch_xpu_available,
+    is_torchdynamo_exporting,
+    logging,
+)
 from ..utils.import_utils import is_torch_greater_or_equal
 
 
@@ -35,7 +41,7 @@ def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor, valu
     if (
         key.device.type == "cpu"
         and _is_torch_greater_or_equal_than_2_9
-        and not torch.compiler.is_compiling()
+        and not is_torchdynamo_exporting()
         and not torch.jit.is_tracing()
         and not (torch.is_grad_enabled() and (key.requires_grad or value.requires_grad))
     ):
